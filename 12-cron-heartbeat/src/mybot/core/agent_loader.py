@@ -42,7 +42,7 @@ class AgentLoader:
             raise DefNotFoundError("agent", agent_id)
 
         try:
-            content = agent_file.read_text()
+            content = agent_file.read_text(encoding="utf-8")
             agent_def = parse_definition(content, agent_id, self._parse_agent_def)
         except InvalidDefError:
             raise

@@ -122,7 +122,7 @@ def identity_recall_reply(state: "SessionState") -> str | None:
             "Tell me what you'd like me to call you."
         )
 
-    name = parse_display_name_from_identity(path.read_text())
+    name = parse_display_name_from_identity(path.read_text(encoding="utf-8"))
     if name:
         return f"Your name is {name}."
     return (
@@ -136,7 +136,7 @@ def load_identity_snippet(config: "Config", user_id: str, max_chars: int = 1200)
     path = identity_file_path(config, user_id)
     if not path.exists():
         return ""
-    text = path.read_text().strip()
+    text = path.read_text(encoding="utf-8").strip()
     if not text:
         return ""
     if len(text) > max_chars:

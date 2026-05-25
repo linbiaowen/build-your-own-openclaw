@@ -60,5 +60,5 @@ class Config(BaseModel):
         if not config_file.exists():
             raise FileNotFoundError(f"Config file not found: {config_file}")
 
-        with open(config_file) as f:
+        with open(config_file, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}

@@ -127,7 +127,7 @@ class HistoryStore:
             return []
 
         sessions = []
-        with open(self.index_path) as f:
+        with open(self.index_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -139,7 +139,7 @@ class HistoryStore:
 
     def _write_index(self, sessions: list[HistorySession]) -> None:
         """Write all session entries to index.jsonl."""
-        with open(self.index_path, "w") as f:
+        with open(self.index_path, "w", encoding="utf-8") as f:
             for session in sessions:
                 f.write(session.model_dump_json() + "\n")
 
@@ -156,13 +156,13 @@ class HistoryStore:
         if not self.active_path.exists():
             return {}
         try:
-            data = json.loads(self.active_path.read_text())
+            data = json.loads(self.active_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return {}
         return data if isinstance(data, dict) else {}
 
     def _write_active(self, data: dict[str, str]) -> None:
-        self.active_path.write_text(json.dumps(data, indent=2) + "\n")
+        self.active_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
     def get_active_session_id(
         self, agent_id: str, source: EventSource | None = None
@@ -202,7 +202,7 @@ class HistoryStore:
             updated_at=now,
         )
 
-        with open(self.index_path, "a") as f:
+        with open(self.index_path, "a", encoding="utf-8") as f:
             f.write(session.model_dump_json() + "\n")
 
         self._session_path(session_id).touch()
@@ -220,7 +220,7 @@ class HistoryStore:
         session = sessions[idx]
 
         session_file = self._session_path(session_id)
-        with open(session_file, "a") as f:
+        with open(session_file, "a", encoding="utf-8") as f:
             f.write(message.model_dump_json() + "\n")
 
         session.message_count += 1
@@ -266,7 +266,7 @@ class HistoryStore:
             return []
 
         messages: list[HistoryMessage] = []
-        with open(session_file) as f:
+        with open(session_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:

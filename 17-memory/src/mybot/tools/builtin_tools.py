@@ -46,7 +46,7 @@ def _resolve_tool_path(path: str, session: "AgentSession") -> Path:
 async def read_file(path: str, session: "AgentSession") -> str:
     """Read and return the contents of a file at the given path."""
     try:
-        return _resolve_tool_path(path, session).read_text()
+        return _resolve_tool_path(path, session).read_text(encoding="utf-8")
     except FileNotFoundError:
         return f"Error: File not found: {path}"
     except PermissionError:
@@ -77,7 +77,7 @@ async def write_file(path: str, content: str, session: "AgentSession") -> str:
     try:
         resolved = _resolve_tool_path(path, session)
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        resolved.write_text(content)
+        resolved.write_text(content, encoding="utf-8")
         return f"Successfully wrote to: {resolved}"
     except PermissionError:
         return f"Error: Permission denied writing to: {path}"
@@ -109,11 +109,11 @@ async def edit_file(
     """Edit a file by replacing old_text with new_text."""
     try:
         resolved = _resolve_tool_path(path, session)
-        content = resolved.read_text()
+        content = resolved.read_text(encoding="utf-8")
         if old_text not in content:
             return f"Error: '{old_text}' not found in {resolved}"
         new_content = content.replace(old_text, new_text)
-        resolved.write_text(new_content)
+        resolved.write_text(new_content, encoding="utf-8")
         return f"Successfully edited {resolved}"
     except FileNotFoundError:
         return f"Error: File not found: {path}"

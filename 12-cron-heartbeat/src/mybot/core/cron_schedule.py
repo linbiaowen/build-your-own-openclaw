@@ -177,7 +177,7 @@ def create_cron_job(
         f"{prompt.strip()}\n"
     )
     path = cron_dir / "CRON.md"
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     return path
 
 

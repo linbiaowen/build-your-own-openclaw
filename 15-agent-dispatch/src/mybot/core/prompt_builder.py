@@ -89,7 +89,7 @@ class PromptBuilder:
         if bootstrap_path.exists():
             parts.append(
                 substitute_workspace_templates(
-                    bootstrap_path.read_text().strip(),
+                    bootstrap_path.read_text(encoding="utf-8").strip(),
                     self.context.config,
                 )
             )
@@ -98,7 +98,7 @@ class PromptBuilder:
         if agents_path.exists():
             parts.append(
                 substitute_workspace_templates(
-                    agents_path.read_text().strip(),
+                    agents_path.read_text(encoding="utf-8").strip(),
                     self.context.config,
                 )
             )

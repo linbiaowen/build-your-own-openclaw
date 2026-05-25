@@ -67,11 +67,11 @@ class PromptBuilder:
 
         bootstrap_path = self.context.config.workspace / "BOOTSTRAP.md"
         if bootstrap_path.exists():
-            parts.append(bootstrap_path.read_text().strip())
+            parts.append(bootstrap_path.read_text(encoding="utf-8").strip())
 
         agents_path = self.context.config.workspace / "AGENTS.md"
         if agents_path.exists():
-            parts.append(agents_path.read_text().strip())
+            parts.append(agents_path.read_text(encoding="utf-8").strip())
 
         cron_list = self._format_cron_list()
         if cron_list:

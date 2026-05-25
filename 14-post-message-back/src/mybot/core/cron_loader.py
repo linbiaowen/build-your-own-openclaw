@@ -105,7 +105,7 @@ class CronLoader:
             raise DefNotFoundError("cron", cron_id)
 
         try:
-            content = cron_file.read_text()
+            content = cron_file.read_text(encoding="utf-8")
             cron_def = parse_definition(content, cron_id, self._parse_cron_def)
         except InvalidDefError:
             raise

@@ -23,7 +23,7 @@ Deterministic functionality invoked in chat, such as `/help`, `/skills`, and `/s
 
 - **Command**: Base class for slash commands (async execute method)
 - **CommandRegistry**: Registers and dispatches commands
-- **Commands**: `/help`, `/skills`, `/session`
+- **Commands**: `/help`, `/skills`, `/session`, `/list-cron`
 
 
 

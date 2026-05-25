@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +14,7 @@ from litellm.types.completion import (
 )
 
 from mybot.provider.llm import LLMProvider, LLMToolCall
+from mybot.provider.llm.base import looks_like_structured_leak
 from mybot.core.session_state import SessionState
 from mybot.core.skill_loader import SkillLoader
 from mybot.tools.registry import ToolRegistry
@@ -22,6 +24,13 @@ from mybot.tools.skill_tool import create_skill_tool
 if TYPE_CHECKING:
     from mybot.core.agent_loader import AgentDef
     from mybot.utils.config import Config
+
+MAX_TOOL_ITERATIONS = 5
+
+_CAPABILITIES_LIST_RE = re.compile(
+    r"\b(what skills|which skills|list skills|available skills|what tools|which tools|list tools)\b",
+    re.IGNORECASE,
+)
 
 
 class Agent:
@@ -75,16 +84,54 @@ class AgentSession:
         """Delegate to state."""
         return self.state.session_id
 
+    def _wants_capabilities_list(self, message: str) -> bool:
+        return bool(_CAPABILITIES_LIST_RE.search(message))
+
+    def _format_capabilities_list(self) -> str:
+        """Plain-text list of built-in tools and available skills."""
+        lines = ["Here are the tools and skills I can use:\n", "**Built-in tools**"]
+        for tool in self.tools.list_all():
+            if tool.name == "skill":
+                continue
+            lines.append(f"- **{tool.name}**: {tool.description}")
+
+        skills = self.agent.skill_loader.discover_skills()
+        if skills:
+            lines.append("\n**Skills** (load full instructions with the `skill` tool):")
+            for skill in skills:
+                lines.append(f"- **{skill.name}** (`{skill.id}`): {skill.description}")
+
+        return "\n".join(lines)
+
     async def chat(self, message: str) -> str:
         """Send a message to the LLM and get a response."""
         user_msg: Message = {"role": "user", "content": message}
         self.state.add_message(user_msg)
 
-        tool_schemas = self.tools.get_tool_schemas()
+        if self._wants_capabilities_list(message):
+            content = self._format_capabilities_list()
+            self.state.add_message({"role": "assistant", "content": content})
+            return content
 
-        while True:
+        tool_schemas = self.tools.get_tool_schemas()
+        content = ""
+
+        for _ in range(MAX_TOOL_ITERATIONS):
             messages = self.state.build_messages()
             content, tool_calls = await self.agent.llm.chat(messages, tool_schemas)
+
+            if not tool_calls:
+                if not content.strip() or looks_like_structured_leak(content):
+                    if self._wants_capabilities_list(message):
+                        content = self._format_capabilities_list()
+                    else:
+                        content = await self._chat_without_tools()
+                self.state.add_message({"role": "assistant", "content": content})
+                break
+
+            if not any(self.tools.get(tc.name) for tc in tool_calls):
+                content = await self._chat_without_tools()
+                break
 
             tool_call_dicts: list[ChatCompletionMessageToolCallParam] = [
                 {
@@ -97,18 +144,30 @@ class AgentSession:
             assistant_msg: Message = {
                 "role": "assistant",
                 "content": content,
+                "tool_calls": tool_call_dicts,
             }
-            if tool_call_dicts:
-                assistant_msg["tool_calls"] = tool_call_dicts
             self.state.add_message(assistant_msg)
-
-            if not tool_calls:
-                break
-
             await self._handle_tool_calls(tool_calls)
 
-            continue
+        else:
+            if self._wants_capabilities_list(message):
+                content = self._format_capabilities_list()
+            else:
+                content = await self._chat_without_tools()
 
+        if looks_like_structured_leak(content):
+            if self._wants_capabilities_list(message):
+                content = self._format_capabilities_list()
+            else:
+                content = await self._chat_without_tools()
+
+        return content
+
+    async def _chat_without_tools(self) -> str:
+        """Ask the LLM for a plain-text reply when tool calling fails."""
+        messages = self.state.build_messages()
+        content, _ = await self.agent.llm.chat(messages, tools=None)
+        self.state.add_message({"role": "assistant", "content": content})
         return content
 
     async def _handle_tool_calls(

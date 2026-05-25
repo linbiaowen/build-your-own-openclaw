@@ -64,9 +64,30 @@ def chat(
             help="Agent ID to use (overrides default_agent from config)",
         ),
     ] = None,
+    new_session: Annotated[
+        bool,
+        typer.Option(
+            "--new",
+            "-n",
+            help="Start a new session instead of resuming the latest one",
+        ),
+    ] = False,
+    session_id: Annotated[
+        str | None,
+        typer.Option(
+            "--session",
+            "-s",
+            help="Resume a specific session by ID",
+        ),
+    ] = None,
 ) -> None:
     """Start interactive chat session."""
-    chat_command(ctx, agent_id=agent)
+    chat_command(
+        ctx,
+        agent_id=agent,
+        new_session=new_session,
+        session_id=session_id,
+    )
 
 
 if __name__ == "__main__":

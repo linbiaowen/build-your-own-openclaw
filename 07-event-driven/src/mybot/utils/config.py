@@ -39,13 +39,14 @@ class Crawl4AIWebReadConfig(BaseModel):
 
 
 class Config(BaseModel):
-    """Main configuration for step 06."""
+    """Main configuration for step 07."""
 
     workspace: Path
     llm: LLMConfig
     default_agent: str
     agents_path: Path = Field(default=Path("agents"))
     skills_path: Path = Field(default=Path("skills"))
+    crons_path: Path = Field(default=Path("crons"))
     history_path: Path = Field(default=Path(".history"))
     websearch: BraveWebSearchConfig | None = None
     webread: Crawl4AIWebReadConfig | None = None
@@ -56,6 +57,7 @@ class Config(BaseModel):
         for field_name in (
             "agents_path",
             "skills_path",
+            "crons_path",
             "history_path",
         ):
             path = getattr(self, field_name)

@@ -25,6 +25,16 @@ cookie: Yes, <content>.
 - **Memory agent** - Specialized agent for memory management
 - [default_workspace/agents/cookie/AGENT.md](../default_workspace/agents/cookie/AGENT.md)
 
+### Agent roles (`AGENT.md` frontmatter)
+
+| `role` | Example | Framework behavior |
+|--------|---------|-------------------|
+| `assistant` | pickle | User-facing agent; may get memory-delegate hints in the system prompt |
+| `memory` | cookie | Receives per-user memory scope on `subagent_dispatch`; listed as delegate target |
+| *(omitted)* | — | Same as a non-`memory` agent today |
+
+Only `role: memory` is interpreted in code; other roles are for clarity and future routing.
+
 ## Try it out
 
 ```bash

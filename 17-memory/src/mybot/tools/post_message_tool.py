@@ -15,17 +15,18 @@ def create_post_message_tool(context: "SharedContext") -> BaseTool | None:
     """Factory to create post_message tool."""
     config = context.config
 
-    # Return None if channels not enabled or no channels configured
     if not config.channels.enabled:
         return None
 
-    # Check if we have any channels configured
     if not context.channels:
         return None
 
     @tool(
         name="post_message",
-        description="Send a message to the user via the default messaging platform. Use this to proactively notify the user about completed tasks, cron results, or important updates.",
+        description=(
+            "Send a message to the user via the default messaging platform. "
+            "Use for cron results, reminders, and proactive notifications."
+        ),
         parameters={
             "type": "object",
             "properties": {
@@ -39,8 +40,12 @@ def create_post_message_tool(context: "SharedContext") -> BaseTool | None:
     )
     async def post_message(content: str, session: "AgentSession") -> str:
         """Send a message to the default user on the default platform."""
+        if session.state.source.is_cron:
+            if session.state.cron_outbound_sent:
+                return "Message already sent for this cron run"
+            session.state.cron_outbound_sent = True
+
         try:
-            # Publish OUTBOUND event for the DeliveryWorker to handle
             event = OutboundEvent(
                 session_id=session.session_id,
                 source=AgentEventSource(agent_id=session.agent.agent_def.id),

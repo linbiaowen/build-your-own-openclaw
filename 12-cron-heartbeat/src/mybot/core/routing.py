@@ -91,11 +91,47 @@ class RoutingTable:
 
         return session.session_id
 
-    def persist_binding(self, source_pattern: str, agent_id: str) -> None:
-        """Add and persist a routing binding to config.user.yaml."""
-        bindings = self.context.config.routing.get("bindings", [])
-        bindings.append({"agent": agent_id, "value": source_pattern})
+    def _save_bindings(self, bindings: list[dict[str, str]]) -> None:
+        """Persist bindings and invalidate the in-memory cache."""
         self.context.config.set_runtime("routing.bindings", bindings)
+        self.context.config.routing = {
+            **self.context.config.routing,
+            "bindings": bindings,
+        }
+        self.bindings = None
+        self._config_hash = None
+
+    def persist_binding(self, source_pattern: str, agent_id: str) -> None:
+        """Add and persist a routing binding to config.runtime.yaml."""
+        bindings = list(self.context.config.routing.get("bindings", []))
+        bindings.append({"agent": agent_id, "value": source_pattern})
+        self._save_bindings(bindings)
+
+    def remove_bindings(
+        self,
+        source_pattern: str | None = None,
+        agent_id: str | None = None,
+    ) -> int:
+        """Remove bindings matching pattern and/or agent. Returns count removed."""
+        bindings = list(self.context.config.routing.get("bindings", []))
+        if source_pattern is None and agent_id is None:
+            removed = len(bindings)
+            self._save_bindings([])
+            return removed
+
+        kept: list[dict[str, str]] = []
+        removed = 0
+        for binding in bindings:
+            match_pattern = (
+                source_pattern is None or binding["value"] == source_pattern
+            )
+            match_agent = agent_id is None or binding["agent"] == agent_id
+            if match_pattern and match_agent:
+                removed += 1
+            else:
+                kept.append(binding)
+        self._save_bindings(kept)
+        return removed
 
     def config_source_session_cache(
         self, source_str: str, session_id: str | None

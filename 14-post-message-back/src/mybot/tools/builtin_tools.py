@@ -123,7 +123,12 @@ async def bash(command: str, session: "AgentSession") -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return "Error: command timed out after 30s"
         output = stdout.decode() if stdout else ""
         error = stderr.decode() if stderr else ""
         if output and error:

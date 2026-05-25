@@ -10,6 +10,7 @@ from croniter import croniter
 
 from .worker import Worker
 from mybot.core.agent import Agent
+from mybot.core.cron_schedule import parse_fixed_schedule_run_at
 from mybot.core.events import CronEventSource, DispatchEvent
 
 if TYPE_CHECKING:
@@ -32,6 +33,11 @@ def find_due_jobs(
     due_jobs = []
     for job in jobs:
         try:
+            if job.one_off:
+                run_at = parse_fixed_schedule_run_at(job.schedule, now)
+                if run_at is not None and now_minute >= run_at:
+                    due_jobs.append(job)
+                continue
             if croniter.match(job.schedule, now_minute):
                 due_jobs.append(job)
         except Exception as e:
@@ -46,6 +52,8 @@ class CronWorker(Worker):
 
     def __init__(self, context: "SharedContext"):
         super().__init__(context)
+        self._fired_slots: set[str] = set()
+        self._fired_minute: datetime | None = None
 
     async def run(self) -> None:
         """Check every minute for due jobs."""
@@ -57,14 +65,35 @@ class CronWorker(Worker):
             except Exception as e:
                 self.logger.error(f"Error in tick: {e}")
 
-            await asyncio.sleep(60)
+            jobs = self.context.cron_loader.discover_crons()
+            interval = 15 if any(j.one_off for j in jobs) else 60
+            await asyncio.sleep(interval)
 
     async def _tick(self) -> None:
         """Find and dispatch due jobs via EventBus."""
+        now = datetime.now()
+        now_minute = now.replace(second=0, microsecond=0)
+        if self._fired_minute != now_minute:
+            self._fired_slots.clear()
+            self._fired_minute = now_minute
+
         jobs = self.context.cron_loader.discover_crons()
-        due_jobs = find_due_jobs(jobs)
+        due_jobs = find_due_jobs(jobs, now)
 
         for cron_def in due_jobs:
+            slot = f"{cron_def.id}:{now_minute.isoformat()}"
+            if slot in self._fired_slots:
+                continue
+            self._fired_slots.add(slot)
+
+            if cron_def.one_off:
+                cron_path = self.context.cron_loader.config.crons_path / cron_def.id
+                if cron_path.exists():
+                    shutil.rmtree(cron_path)
+                    self.logger.info(
+                        f"Removed one-off cron before dispatch: {cron_def.id}"
+                    )
+
             agent_def = self.context.agent_loader.load(cron_def.agent)
             agent = Agent(agent_def, self.context)
             cron_source = CronEventSource(cron_id=cron_def.id)
@@ -77,8 +106,3 @@ class CronWorker(Worker):
             )
             await self.context.eventbus.publish(event)
             self.logger.info(f"Dispatched cron job: {cron_def.id}")
-
-            if cron_def.one_off:
-                cron_path = self.context.cron_loader.config.crons_path / cron_def.id
-                shutil.rmtree(cron_path)
-                self.logger.info(f"Deleted one-off cron job: {cron_def.id}")

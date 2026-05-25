@@ -53,7 +53,8 @@ class HistoryStore:
 cd 03-persistence
 uv run my-bot chat
 
-# Each run starts a new session
+# By default, resumes your latest session (remembers prior messages)
+# Use --new to start a fresh session
 # Messages are saved to .history/ directory
 ```
 

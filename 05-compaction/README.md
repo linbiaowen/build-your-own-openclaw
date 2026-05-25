@@ -29,7 +29,7 @@ Long conversations eventually hit context limits. Compaction solves this by summ
 - **Token Estimation**: Uses litellm's token_counter for accurate estimates
 - **Truncation Strategy**: First truncates large tool results, then summarizes old messages
 - **Context Compaction**: Summarize old messages, and use that as the first few prompts of a new session.
-- **Commands**: `/compact` (manual), `/context` (show usage)
+- **Commands**: `/help`, `/skills`, `/session`, `/list-cron`, `/compact`, `/context`
 
 
 

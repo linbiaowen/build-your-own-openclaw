@@ -24,7 +24,14 @@ from mybot.utils.config import Config
 class ChatLoop:
     """Interactive chat session using event-driven architecture."""
 
-    def __init__(self, config: Config, agent_id: str | None = None):
+    def __init__(
+        self,
+        config: Config,
+        agent_id: str | None = None,
+        *,
+        new_session: bool = False,
+        session_id: str | None = None,
+    ):
         self.config = config
         self.console = Console()
         self.context = SharedContext(config=config)
@@ -39,6 +46,27 @@ class ChatLoop:
 
         agent_id = agent_id or config.default_agent
         self.agent_def = self.context.agent_loader.load(agent_id)
+        agent = Agent(self.agent_def, self.context)
+
+        if session_id:
+            agent.load_session(session_id)
+            info = self.context.history_store.get_session_info(session_id)
+            self.session_id = session_id
+            self._resume_label = info.title if info else session_id[:8]
+        elif new_session:
+            self.session_id = agent.new_session().session_id
+            self._resume_label = None
+        else:
+            resumed = agent.resume_active_session()
+            if resumed:
+                self.session_id = resumed.session_id
+                info = self.context.history_store.get_session_info(self.session_id)
+                self._resume_label = (
+                    info.title if info else self.session_id[:8]
+                )
+            else:
+                self.session_id = agent.new_session().session_id
+                self._resume_label = None
 
     async def handle_outbound_event(self, event: OutboundEvent) -> None:
         """Handle outbound events by adding to response queue."""
@@ -59,21 +87,24 @@ class ChatLoop:
 
     async def run(self) -> None:
         """Run the interactive chat loop."""
+        welcome = "Welcome to my-bot!"
+        if self._resume_label:
+            welcome += f"\nResuming session: {self._resume_label}"
+
         self.console.print(
             Panel(
-                Text("Welcome to my-bot!", style="bold cyan"),
+                Text(welcome, style="bold cyan"),
                 title="Chat",
                 border_style="cyan",
             )
         )
-        self.console.print("Type '/help' for commands, 'quit' or 'exit' to end.\n")
+        self.console.print(
+            "Type '/help' for commands, 'quit' or 'exit' to end.\n"
+            "[dim]Use --new to start a fresh session.[/dim]\n"
+        )
 
         for worker in self.workers:
             worker.start()
-
-        session_id = (
-            Agent(self.agent_def, self.context).new_session().session_id
-        )
 
         try:
             while True:
@@ -86,7 +117,7 @@ class ChatLoop:
                     continue
 
                 event = InboundEvent(
-                    session_id=session_id,
+                    session_id=self.session_id,
                     content=user_input,
                 )
                 await self.context.eventbus.publish(event)
@@ -108,9 +139,20 @@ class ChatLoop:
                 await worker.stop()
 
 
-def chat_command(ctx: typer.Context, agent_id: str | None = None) -> None:
+def chat_command(
+    ctx: typer.Context,
+    agent_id: str | None = None,
+    *,
+    new_session: bool = False,
+    session_id: str | None = None,
+) -> None:
     """Start interactive chat session."""
     config = ctx.obj.get("config")
 
-    chat_loop = ChatLoop(config, agent_id=agent_id)
+    chat_loop = ChatLoop(
+        config,
+        agent_id=agent_id,
+        new_session=new_session,
+        session_id=session_id,
+    )
     asyncio.run(chat_loop.run())

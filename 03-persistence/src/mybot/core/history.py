@@ -1,5 +1,6 @@
 """JSONL file-based conversation history backend."""
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
@@ -92,6 +93,7 @@ class HistoryStore:
         self.base_path = Path(base_path)
         self.sessions_path = self.base_path / "sessions"
         self.index_path = self.base_path / "index.jsonl"
+        self.active_path = self.base_path / "active.json"
 
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.sessions_path.mkdir(parents=True, exist_ok=True)
@@ -131,6 +133,31 @@ class HistoryStore:
                 return i
         return -1
 
+    def _read_active(self) -> dict[str, str]:
+        if not self.active_path.exists():
+            return {}
+        try:
+            data = json.loads(self.active_path.read_text())
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write_active(self, data: dict[str, str]) -> None:
+        self.active_path.write_text(json.dumps(data, indent=2) + "\n")
+
+    def get_active_session_id(self, agent_id: str) -> str | None:
+        """Get the active session id for an agent."""
+        session_id = self._read_active().get(agent_id)
+        if session_id and self.get_session_info(session_id):
+            return session_id
+        return None
+
+    def set_active_session(self, agent_id: str, session_id: str) -> None:
+        """Mark a session as the active conversation for an agent."""
+        data = self._read_active()
+        data[agent_id] = session_id
+        self._write_active(data)
+
     def create_session(self, agent_id: str, session_id: str) -> dict[str, Any]:
         """Create a new conversation session."""
         now = _now_iso()
@@ -149,6 +176,7 @@ class HistoryStore:
 
         # Create session file
         self._session_path(session_id).touch()
+        self.set_active_session(agent_id, session_id)
 
         return session.model_dump()
 
@@ -180,11 +208,18 @@ class HistoryStore:
         sessions.sort(key=lambda s: s.updated_at, reverse=True)
         self._write_index(sessions)
 
-    def list_sessions(self) -> list[HistorySession]:
+    def list_sessions(self, agent_id: str | None = None) -> list[HistorySession]:
         """List all sessions, most recently updated first."""
         sessions = self._read_index()
+        if agent_id is not None:
+            sessions = [s for s in sessions if s.agent_id == agent_id]
         sessions.sort(key=lambda s: s.updated_at, reverse=True)
         return sessions
+
+    def get_latest_session(self, agent_id: str) -> HistorySession | None:
+        """Return the most recently updated session for an agent."""
+        sessions = self.list_sessions(agent_id=agent_id)
+        return sessions[0] if sessions else None
 
     def get_messages(self, session_id: str) -> list[HistoryMessage]:
         """Get all messages for a session."""

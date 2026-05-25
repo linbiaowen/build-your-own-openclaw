@@ -28,27 +28,21 @@ subagent_dispatch(agent_id="agent_name", task="description of what to do")
 ### Example Patterns
 
 ```python
-# Store a user preference
+# Store a user preference (use your workspace's memory agent id — see table above)
 subagent_dispatch(
-    agent_id="cookie",
+    agent_id="<memory-agent-id>",
     task="Remember that the user prefers TypeScript over JavaScript"
 )
 
 # Retrieve context about a topic
 subagent_dispatch(
-    agent_id="cookie",
+    agent_id="<memory-agent-id>",
     task="What do you know about the user's coding preferences?"
-)
-
-# Store project information
-subagent_dispatch(
-    agent_id="cookie",
-    task="Remember that the user is working on a Python project using FastAPI"
 )
 ```
 
 ## Important Notes
 
-- Always use Cookie for memory operations - don't read/write memory files directly
-- Cookie manages the memory axis: topics/ (timeless facts), projects/ (project context), daily-notes/ (events)
+- Always dispatch to the agent with `role: memory` in its AGENT.md frontmatter — don't read/write memory files directly from the main agent
+- Memory agents manage topics/ (timeless facts), projects/ (project context), daily-notes/ (events)
 - Dispatched tasks are asynchronous - the agent will handle the details

@@ -1,6 +1,8 @@
 ---
 name: Pickle
 description: A friendly cat assistant talk to user directly, managing daily tasks.
+role: assistant
+max_concurrency: 1   # ← this (default: 1 if omitted)
 allow_skills: true
 llm:
   temperature: 0.7

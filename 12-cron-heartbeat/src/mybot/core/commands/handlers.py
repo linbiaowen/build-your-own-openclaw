@@ -92,6 +92,49 @@ class ClearCommand(Command):
         return "✓ Conversation cleared. Next message starts fresh."
 
 
+class ListCronCommand(Command):
+    """List all scheduled cron jobs."""
+
+    name = "list-cron"
+    aliases = ["crons", "list-crons"]
+    description = "List all scheduled cron jobs"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        if args:
+            cron_id = args.strip()
+            try:
+                cron = session.shared_context.cron_loader.load(cron_id)
+            except DefNotFoundError:
+                return f"✗ Cron `{cron_id}` not found."
+
+            return (
+                f"**Cron:** `{cron.id}`\n"
+                f"**Name:** {cron.name}\n"
+                f"**Schedule:** `{cron.schedule}`\n"
+                f"**Agent:** {cron.agent}\n"
+                f"**One-off:** {'yes' if cron.one_off else 'no'}\n"
+                f"**Description:** {cron.description}\n\n"
+                f"---\n\n**Prompt:**\n```\n{cron.prompt}\n```"
+            )
+
+        crons = session.shared_context.cron_loader.discover_crons()
+        crons_path = session.shared_context.config.crons_path
+
+        if not crons:
+            return f"No cron jobs found in `{crons_path}`."
+
+        lines = [f"**Cron jobs** (`{crons_path}`):\n"]
+        for cron in sorted(crons, key=lambda c: c.id):
+            one_off = "yes" if cron.one_off else "no"
+            lines.append(
+                f"- **`{cron.id}`** — {cron.name}\n"
+                f"  - Schedule: `{cron.schedule}`\n"
+                f"  - Agent: `{cron.agent}` | One-off: {one_off}\n"
+                f"  - {cron.description}"
+            )
+        return "\n".join(lines)
+
+
 class AgentCommand(Command):
     """List agents or show agent details."""
 
@@ -165,40 +208,6 @@ class SkillsCommand(Command):
         return "\n".join(lines)
 
 
-class CronsCommand(Command):
-    """List all cron jobs or show cron details."""
-
-    name = "crons"
-    description = "List all cron jobs or show cron details"
-
-    async def execute(self, args: str, session: "AgentSession") -> str:
-        if not args:
-            crons = session.shared_context.cron_loader.discover_crons()
-            if not crons:
-                return "No cron jobs configured."
-
-            lines = ["**Cron Jobs:**"]
-            for cron in crons:
-                lines.append(f"- `{cron.id}`: {cron.schedule}")
-            return "\n".join(lines)
-
-        # Show specific cron details
-        cron_id = args.strip()
-        try:
-            cron = session.shared_context.cron_loader.load(cron_id)
-        except DefNotFoundError:
-            return f"✗ Cron `{cron_id}` not found."
-
-        lines = [
-            f"**Cron:** `{cron.id}`",
-            f"**Name:** {cron.name}",
-            f"**Schedule:** `{cron.schedule}`",
-            f"**Agent:** {cron.agent}",
-            f"\n---\n\n**CRON.md:**\n```\n{cron.prompt}\n```",
-        ]
-        return "\n".join(lines)
-
-
 class RouteCommand(Command):
     """Create a routing binding."""
 
@@ -228,6 +237,83 @@ class RouteCommand(Command):
         session.shared_context.routing_table.persist_binding(pattern, agent_id)
 
         return f"✓ Route bound: `{pattern}` → `{agent_id}`"
+
+
+_CLEAR_ALL_FLAGS = frozenset({"--all", "-all", "all", "*"})
+
+
+def _normalize_route_token(token: str) -> str:
+    """Normalize dashes/whitespace so `--all` flags match reliably."""
+    cleaned = "".join(
+        ch for ch in token if ord(ch) >= 32 and ch not in "\u200b\u200c\u200d\ufeff"
+    )
+    return (
+        cleaned.strip()
+        .lower()
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace("\u2212", "-")
+    )
+
+
+def _unroute_clear_all(args: str) -> bool:
+    """True when the user asked to remove every binding."""
+    stripped = args.strip()
+    if not stripped:
+        return False
+    first = _normalize_route_token(stripped.split(None, 1)[0])
+    return first in _CLEAR_ALL_FLAGS
+
+
+class UnrouteCommand(Command):
+    """Remove routing binding(s)."""
+
+    name = "unroute"
+    aliases = ["del-route", "remove-route"]
+    description = "Remove routing binding(s) (persists to config)"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        args = args.strip()
+        routing_table = session.shared_context.routing_table
+
+        if not args:
+            return (
+                "**Usage:**\n"
+                "- `/unroute <source_pattern>` — remove all bindings for that pattern\n"
+                "- `/unroute <source_pattern> <agent_id>` — remove one exact binding\n"
+                "- `/unroute --all` — remove every binding (also: `/unroute *`)"
+            )
+
+        if _unroute_clear_all(args):
+            removed = routing_table.remove_bindings()
+            if removed == 0:
+                return "No routing bindings to remove."
+            return f"✓ Removed all {removed} routing binding(s)."
+
+        parts = args.split(None, 1)
+        pattern = parts[0]
+        agent_id = parts[1] if len(parts) > 1 else None
+
+        try:
+            re.compile(f"^{pattern}$")
+        except re.error as e:
+            return f"✗ Invalid regex pattern: {e}"
+
+        if agent_id:
+            try:
+                session.shared_context.agent_loader.load(agent_id)
+            except ValueError:
+                return f"✗ Agent `{agent_id}` not found."
+
+        removed = routing_table.remove_bindings(pattern, agent_id)
+        if removed == 0:
+            if agent_id:
+                return f"✗ No binding found for `{pattern}` → `{agent_id}`."
+            return f"✗ No binding found for pattern `{pattern}`."
+
+        if agent_id:
+            return f"✓ Removed {removed} binding(s): `{pattern}` → `{agent_id}`."
+        return f"✓ Removed {removed} binding(s) matching `{pattern}`."
 
 
 class BindingsCommand(Command):

@@ -6,7 +6,7 @@ import random
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
-from mybot.core.events import EventSource, OutboundEvent
+from mybot.core.events import DispatchResultEvent, EventSource, OutboundEvent
 from mybot.core.history import HistorySession
 from .worker import SubscriberWorker
 
@@ -86,7 +86,10 @@ class DeliveryWorker(SubscriberWorker):
     def __init__(self, context: "SharedContext"):
         super().__init__(context)
         self.context.eventbus.subscribe(OutboundEvent, self.handle_event)
-        self.logger.info("DeliveryWorker subscribed to OUTBOUND events")
+        self.context.eventbus.subscribe(DispatchResultEvent, self.handle_event)
+        self.logger.info(
+            "DeliveryWorker subscribed to OUTBOUND and DispatchResult events"
+        )
 
     async def _deliver_with_retry(
         self, chunks: list[str], source: "EventSource", channel: "Channel[Any]"
@@ -150,7 +153,7 @@ class DeliveryWorker(SubscriberWorker):
             )
             return None
 
-    async def handle_event(self, event: OutboundEvent) -> None:
+    async def handle_event(self, event: OutboundEvent | DispatchResultEvent) -> None:
         """Handle an outbound message event."""
         try:
             session_info = self._get_session_source(event.session_id)
@@ -158,6 +161,22 @@ class DeliveryWorker(SubscriberWorker):
             if not session_info or not session_info.source:
                 self.logger.warning(
                     f"No source for session {event.session_id}, skipping delivery"
+                )
+                return
+
+            session_source = session_info.get_source()
+            if isinstance(event, DispatchResultEvent) and session_source.is_cron:
+                self.context.eventbus.ack(event)
+                self.logger.debug(
+                    "Skipping DispatchResult delivery for cron (post_message only)"
+                )
+                return
+
+            if isinstance(event, DispatchResultEvent) and session_source.is_agent:
+                self.context.eventbus.ack(event)
+                self.logger.debug(
+                    "Skipping DispatchResult delivery for subagent session %s",
+                    event.session_id,
                 )
                 return
 

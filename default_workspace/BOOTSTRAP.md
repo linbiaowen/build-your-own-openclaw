@@ -25,9 +25,11 @@
 │   └── {name}/
 │       └── CRON.md      # Skill definition
 └── memories/             # Persistent memory storage
-    ├── topics/           # Timeless facts
-    ├── projects/         # Project-specific context
-    └── daily-notes/      # Day-specific events (YYYY-MM-DD.md)
+    └── users/            # Per end-user (Telegram user id, WS id, cli-user, …)
+        └── {user-id}/
+            ├── topics/       # Timeless facts (identity.md, preferences, …)
+            ├── projects/     # Project-specific context
+            └── daily-notes/  # Day-specific events (YYYY-MM-DD.md)
 ```
 
 ## File Purposes

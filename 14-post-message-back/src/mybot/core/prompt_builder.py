@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from mybot.core.context import SharedContext
     from mybot.core.events import EventSource
@@ -32,7 +31,15 @@ class PromptBuilder:
         if bootstrap:
             layers.append(bootstrap)
 
-        # Layer 4: Runtime context
+        # Layer 4: Skills (optional)
+        skills_layer = self._build_skills_layer(state)
+        if skills_layer:
+            layers.append(skills_layer)
+
+        # Layer 5: Scheduled tasks guidance
+        layers.append(self._build_cron_guidance())
+
+        # Layer 6: Runtime context
         layers.append(
             self._build_runtime_context(
                 state.agent.agent_def.id,
@@ -40,8 +47,17 @@ class PromptBuilder:
             )
         )
 
-        # Layer 5: Channel hint
+        # Layer 7: Channel hint
         layers.append(self._build_channel_hint(state.source))
+
+        if state.ephemeral_system_addon:
+            layers.append(state.ephemeral_system_addon)
+
+        layers.append(
+            "Always respond in plain natural language. "
+            "Never output JSON, tool_calls, or other structured formats "
+            "unless the user explicitly asks."
+        )
 
         return "\n\n".join(layers)
 
@@ -57,7 +73,6 @@ class PromptBuilder:
         if agents_path.exists():
             parts.append(agents_path.read_text().strip())
 
-        # Dynamic cron list
         cron_list = self._format_cron_list()
         if cron_list:
             parts.append(cron_list)
@@ -72,8 +87,39 @@ class PromptBuilder:
 
         lines = ["## Scheduled Tasks\n"]
         for cron in crons:
-            lines.append(f"- **{cron.name}**: {cron.description}")
+            lines.append(
+                f"- **`{cron.id}`** — {cron.name}: {cron.description} "
+                f"(`{cron.schedule}`)"
+            )
         return "\n".join(lines)
+
+    def _build_skills_layer(self, state: "SessionState") -> str:
+        if not state.agent.agent_def.allow_skills:
+            return ""
+
+        skills = self.context.skill_loader.discover_skills()
+        if not skills:
+            return ""
+
+        skill_lines = "\n".join(
+            f"- **{skill.name}** (`{skill.id}`): {skill.description}"
+            for skill in skills
+        )
+        return (
+            "## Available Skills\n"
+            f"{skill_lines}\n\n"
+            "Use the `skill` tool to load a skill's full instructions when needed."
+        )
+
+    def _build_cron_guidance(self) -> str:
+        crons_path = self.context.config.crons_path
+        return (
+            "## Scheduled tasks\n"
+            f"You can create recurring jobs (cron) under `{crons_path}`. "
+            "For daily memes, morning reminders, or recurring messages: "
+            "load the `cron-ops` skill with the `skill` tool, then use `write` to create "
+            f"`{crons_path}/<id>/CRON.md`. Never claim you cannot schedule messages."
+        )
 
     def _build_runtime_context(self, agent_id: str, timestamp: datetime) -> str:
         """Build runtime info section."""
@@ -82,10 +128,16 @@ class PromptBuilder:
     def _build_channel_hint(self, source: "EventSource") -> str:
         """Build platform hint."""
         if source.is_cron:
-            return "You are running as a background cron job. Your response will not be sent to user directly."
+            return (
+                "You are running as a background cron job. "
+                "Use the `post_message` tool exactly once to deliver results to the user. "
+                "Do not call `post_message` again after it succeeds."
+            )
         if source.is_agent:
-            return "You are running as a dispatched subagent. Your response will be sent to main agent."
-        elif source.is_platform:
+            return (
+                "You are running as a dispatched subagent. "
+                "Your response will be sent to the main agent."
+            )
+        if source.is_platform:
             return f"You are responding via {source.platform_name}."
-        else:
-            raise ValueError(f"Unknown source type: {source}")
+        return "You are responding via the CLI."

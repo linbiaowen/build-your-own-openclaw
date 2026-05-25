@@ -22,6 +22,9 @@ class SessionState:
     messages: list[Message]
     source: "EventSource"
     shared_context: "SharedContext"
+    ephemeral_system_addon: str = ""
+    cron_outbound_sent: bool = False
+    end_user_id: str | None = None
 
     def add_message(self, message: Message) -> None:
         """Add message to in-memory list + persist."""
@@ -30,7 +33,7 @@ class SessionState:
         self.shared_context.history_store.save_message(self.session_id, history_msg)
 
     def build_messages(self) -> list[Message]:
-        """Build messages list with system prompt."""
+        """Build messages list with layered system prompt."""
         system_prompt = self.shared_context.prompt_builder.build(self)
         messages: list[Message] = [{"role": "system", "content": system_prompt}]
         messages.extend(self.messages)

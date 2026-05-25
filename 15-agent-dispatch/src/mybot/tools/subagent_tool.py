@@ -10,12 +10,15 @@ from mybot.core.events import (
     DispatchEvent,
     DispatchResultEvent,
 )
+from mybot.core.memory_paths import end_user_id_from_source, memory_scope_prompt
 from mybot.tools.base import BaseTool, tool
 from mybot.utils.def_loader import DefNotFoundError
 
 if TYPE_CHECKING:
     from mybot.core.agent import AgentSession
     from mybot.core.context import SharedContext
+
+SUBAGENT_TIMEOUT_S = 120
 
 
 def create_subagent_dispatch_tool(
@@ -80,9 +83,20 @@ def create_subagent_dispatch_tool(
         agent_session = agent.new_session(agent_source)
         session_id = agent_session.session_id
 
-        user_message = task
+        end_user = end_user_id_from_source(session.source)
+        if end_user:
+            agent_session.state.end_user_id = end_user
+
+        parts = [task]
+        if end_user and agent_def.role == "memory":
+            parts.append(memory_scope_prompt(shared_context.config, end_user))
+        elif end_user:
+            parts.append(
+                f"End-user id: {end_user} (scope memory work to that user only)"
+            )
         if context:
-            user_message = f"{task}\n\nContext:\n{context}"
+            parts.append(f"Additional context:\n{context}")
+        user_message = "\n\n".join(parts)
 
         loop = asyncio.get_running_loop()
         result_future: asyncio.Future[str] = loop.create_future()
@@ -110,8 +124,20 @@ def create_subagent_dispatch_tool(
             )
             await shared_context.eventbus.publish(event)
 
-            # Wait for result
-            response = await result_future
+            try:
+                response = await asyncio.wait_for(
+                    result_future, timeout=SUBAGENT_TIMEOUT_S
+                )
+            except asyncio.TimeoutError:
+                return json.dumps(
+                    {
+                        "error": (
+                            f"Subagent '{agent_id}' timed out after "
+                            f"{SUBAGENT_TIMEOUT_S}s"
+                        ),
+                        "session_id": session_id,
+                    }
+                )
         finally:
             # Always unsubscribe
             shared_context.eventbus.unsubscribe(handle_result)

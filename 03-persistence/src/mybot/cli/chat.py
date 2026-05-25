@@ -16,18 +16,42 @@ from mybot.utils.config import Config
 class ChatLoop:
     """Interactive chat session with persistence."""
 
-    def __init__(self, config: Config, agent_id: str | None = None):
+    def __init__(
+        self,
+        config: Config,
+        agent_id: str | None = None,
+        *,
+        new_session: bool = False,
+        session_id: str | None = None,
+    ):
         self.config = config
         self.console = Console()
 
-        # Load agent
         loader = AgentLoader(config)
         agent_id = agent_id or config.default_agent
         self.agent_def = loader.load(agent_id)
 
-        # Create agent and session
         self.agent = Agent(self.agent_def, config)
-        self.session = self.agent.new_session()
+
+        if session_id:
+            self.session = self.agent.load_session(session_id)
+            self.agent.history_store.set_active_session(
+                self.agent_def.id, session_id
+            )
+            info = self.agent.history_store.get_session_info(session_id)
+            self._resume_label = info.title if info else session_id[:8]
+        elif new_session:
+            self.session = self.agent.new_session()
+            self._resume_label = None
+        else:
+            resumed = self.agent.resume_active_session()
+            if resumed:
+                self.session = resumed
+                info = self.agent.history_store.get_session_info(self.session.session_id)
+                self._resume_label = info.title if info else self.session.session_id[:8]
+            else:
+                self.session = self.agent.new_session()
+                self._resume_label = None
 
     def get_user_input(self) -> str:
         """Get user input with styled prompt."""
@@ -44,14 +68,21 @@ class ChatLoop:
 
     async def run(self) -> None:
         """Run the interactive chat loop."""
+        welcome = "Welcome to my-bot!"
+        if self._resume_label:
+            welcome += f"\nResuming session: {self._resume_label}"
+
         self.console.print(
             Panel(
-                Text("Welcome to my-bot!", style="bold cyan"),
+                Text(welcome, style="bold cyan"),
                 title="Chat",
                 border_style="cyan",
             )
         )
-        self.console.print("Type 'quit' or 'exit' to end the session.\n")
+        self.console.print(
+            "Type 'quit' or 'exit' to end the session.\n"
+            "[dim]Use --new to start a fresh session.[/dim]\n"
+        )
 
         try:
             while True:
@@ -74,10 +105,20 @@ class ChatLoop:
             self.console.print("\n[bold yellow]Goodbye![/bold yellow]")
 
 
-
-def chat_command(ctx: typer.Context, agent_id: str | None = None) -> None:
+def chat_command(
+    ctx: typer.Context,
+    agent_id: str | None = None,
+    *,
+    new_session: bool = False,
+    session_id: str | None = None,
+) -> None:
     """Start interactive chat session."""
     config = ctx.obj.get("config")
 
-    chat_loop = ChatLoop(config, agent_id=agent_id)
+    chat_loop = ChatLoop(
+        config,
+        agent_id=agent_id,
+        new_session=new_session,
+        session_id=session_id,
+    )
     asyncio.run(chat_loop.run())

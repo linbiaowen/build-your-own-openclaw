@@ -103,6 +103,10 @@ class WebSocketWorker(SubscriberWorker):
         if not self.clients:
             return
 
+        # Clients only need agent replies, not their own inbound echo
+        if not isinstance(event, OutboundEvent):
+            return
+
         # Serialize event to dict with type information
         event_dict = {
             "type": event.__class__.__name__,

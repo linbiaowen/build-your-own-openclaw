@@ -11,6 +11,7 @@ from litellm.types.completion import (
 )
 
 from mybot.core.session_state import SessionState
+from mybot.core.tool_calls import tool_call_function_name
 
 if TYPE_CHECKING:
     from mybot.core.context import SharedContext
@@ -94,7 +95,7 @@ class ContextGuard:
             # Handle tool calls in assistant messages
             if role == "assistant" and msg.get("tool_calls"):
                 tool_names = [
-                    tc.get("function", {}).get("name", "unknown")
+                    tool_call_function_name(tc)
                     for tc in (cast(ChatCompletionAssistantMessageParam, msg)).get(
                         "tool_calls", []
                     )

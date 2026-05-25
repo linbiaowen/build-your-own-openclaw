@@ -56,12 +56,12 @@ class AgentWorker(SubscriberWorker):
             agent = Agent(agent_def, self.context)
             if session_id:
                 try:
-                    session = agent.resume_session(session_id)
+                    session = agent.load_session(session_id)
                 except ValueError:
                     logger.warning(f"Session {session_id} not found, creating new")
-                    session = agent.new_session(session_id=session_id)
+                    session = agent.new_session(event.source, session_id=session_id)
             else:
-                session = agent.new_session()
+                session = agent.new_session(event.source)
                 session_id = session.session_id
 
             # Check for slash command FIRST
@@ -75,6 +75,9 @@ class AgentWorker(SubscriberWorker):
                     logger.info(f"Command completed: {session_id}")
                     return
 
+            logger.info(
+                f"Processing message for session {session_id} from {event.source}"
+            )
             response = await session.chat(event.content)
             logger.info(f"Session completed: {session_id}")
 

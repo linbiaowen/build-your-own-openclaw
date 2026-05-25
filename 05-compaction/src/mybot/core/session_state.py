@@ -31,6 +31,25 @@ class SessionState:
     def build_messages(self) -> list[Message]:
         """Build messages list with system prompt."""
         system_prompt = self.agent.agent_def.agent_md
+
+        if self.agent.agent_def.allow_skills:
+            skills = self.agent.skill_loader.discover_skills()
+            if skills:
+                skill_lines = "\n".join(
+                    f"- **{skill.name}** (`{skill.id}`): {skill.description}"
+                    for skill in skills
+                )
+                system_prompt += (
+                    "\n\n## Available Skills\n"
+                    f"{skill_lines}\n\n"
+                    "Use the `skill` tool to load a skill's full instructions when needed."
+                )
+
+        system_prompt += (
+            "\n\nAlways respond in plain natural language. "
+            "Never output JSON, tool_calls, or other structured formats unless the user explicitly asks."
+        )
+
         messages: list[Message] = [{"role": "system", "content": system_prompt}]
         messages.extend(self.messages)
         return messages

@@ -84,7 +84,7 @@ class SkillsCommand(Command):
 
     async def execute(self, args: str, session: "AgentSession") -> str:
         if not args:
-            skills = session.shared_context.skill_loader.discover_skills()
+            skills = session.agent.skill_loader.discover_skills()
             if not skills:
                 return "No skills configured."
 
@@ -96,7 +96,7 @@ class SkillsCommand(Command):
         # Show specific skill details
         skill_id = args.strip()
         try:
-            skill = session.shared_context.skill_loader.load_skill(skill_id)
+            skill = session.agent.skill_loader.load_skill(skill_id)
         except DefNotFoundError:
             return f"✗ Skill `{skill_id}` not found."
 
@@ -106,4 +106,30 @@ class SkillsCommand(Command):
             f"**Description:** {skill.description}",
             f"\n---\n\n**SKILL.md:**\n```\n{skill.content}\n```",
         ]
+        return "\n".join(lines)
+
+
+class ListCronCommand(Command):
+    """List all scheduled cron jobs."""
+
+    name = "list-cron"
+    aliases = ["crons", "list-crons"]
+    description = "List all scheduled cron jobs"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        crons = session.agent.cron_loader.discover_crons()
+        crons_path = session.agent.config.crons_path
+
+        if not crons:
+            return f"No cron jobs found in `{crons_path}`."
+
+        lines = [f"**Cron jobs** (`{crons_path}`):\n"]
+        for cron in sorted(crons, key=lambda c: c.id):
+            one_off = "yes" if cron.one_off else "no"
+            lines.append(
+                f"- **`{cron.id}`** — {cron.name}\n"
+                f"  - Schedule: `{cron.schedule}`\n"
+                f"  - Agent: `{cron.agent}` | One-off: {one_off}\n"
+                f"  - {cron.description}"
+            )
         return "\n".join(lines)

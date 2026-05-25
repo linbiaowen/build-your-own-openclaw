@@ -9,6 +9,9 @@ llm:
 
 default_agent: pickle
 
+# Long-term memory files (Cookie agent); resolved under workspace
+# memories_path: memories
+
 # Get your API key at https://brave.com/search/api/
 # websearch:
 #   provider: brave
@@ -17,7 +20,9 @@ default_agent: pickle
 # webread:
 #   provider: crawl4ai
 
-# api: {}
+api:
+  host: 127.0.0.1
+  port: 8031
 
 # channels:
 #   enabled: true
@@ -25,3 +30,14 @@ default_agent: pickle
 #     bot_token: your-bot-token
 #     allowed_user_ids:
 #       - "your_user_id"
+#   discord:
+#     bot_token: your-discord-bot-token
+#     allowed_user_ids: []
+#   teams:
+#     app_id: your-microsoft-app-id
+#     app_password: your-microsoft-app-password
+#     app_type: MultiTenant  # or SingleTenant
+#     app_tenant_id: null    # required for SingleTenant
+#     host: 0.0.0.0
+#     port: 3978
+#     allowed_user_ids: []

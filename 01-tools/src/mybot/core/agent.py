@@ -13,12 +13,15 @@ from litellm.types.completion import (
 )
 
 from mybot.provider.llm import LLMProvider, LLMToolCall
+from mybot.provider.llm.base import looks_like_structured_leak
 from mybot.tools.registry import ToolRegistry
 from mybot.core.session_state import SessionState
 
 if TYPE_CHECKING:
     from mybot.core.agent_loader import AgentDef
     from mybot.utils.config import Config
+
+MAX_TOOL_ITERATIONS = 5
 
 
 class Agent:
@@ -65,10 +68,22 @@ class AgentSession:
         self.state.add_message(user_msg)
 
         tool_schemas = self.tools.get_tool_schemas()
+        content = ""
 
-        while True:
+        for _ in range(MAX_TOOL_ITERATIONS):
             messages = self.state.build_messages()
             content, tool_calls = await self.agent.llm.chat(messages, tool_schemas)
+
+            if not tool_calls:
+                if not content.strip() or looks_like_structured_leak(content):
+                    content = await self._chat_without_tools()
+                else:
+                    self.state.add_message({"role": "assistant", "content": content})
+                break
+
+            if not any(self.tools.get(tc.name) for tc in tool_calls):
+                content = await self._chat_without_tools()
+                break
 
             tool_call_dicts: list[ChatCompletionMessageToolCallParam] = [
                 {
@@ -81,18 +96,21 @@ class AgentSession:
             assistant_msg: Message = {
                 "role": "assistant",
                 "content": content,
+                "tool_calls": tool_call_dicts,
             }
-            if tool_call_dicts:
-                assistant_msg["tool_calls"] = tool_call_dicts
             self.state.add_message(assistant_msg)
-
-            if not tool_calls:
-                break
-
             await self._handle_tool_calls(tool_calls)
 
-            continue
+        else:
+            content = await self._chat_without_tools()
 
+        return content
+
+    async def _chat_without_tools(self) -> str:
+        """Ask the LLM for a plain-text reply when tool calling fails."""
+        messages = self.state.build_messages()
+        content, _ = await self.agent.llm.chat(messages, tools=None)
+        self.state.add_message({"role": "assistant", "content": content})
         return content
 
     async def _handle_tool_calls(

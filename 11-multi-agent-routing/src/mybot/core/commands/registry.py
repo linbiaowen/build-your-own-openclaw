@@ -40,6 +40,8 @@ class CommandRegistry:
             return None
 
         cmd_name = parts[0].lower()
+        if "@" in cmd_name:
+            cmd_name = cmd_name.split("@", 1)[0]
         args = parts[1] if len(parts) > 1 else ""
 
         cmd = self._commands.get(cmd_name)
@@ -61,6 +63,7 @@ class CommandRegistry:
         """Create registry with built-in commands registered."""
         from mybot.core.commands.handlers import (
             HelpCommand,
+            ListCronCommand,
             AgentCommand,
             SkillsCommand,
             CompactCommand,
@@ -68,11 +71,13 @@ class CommandRegistry:
             ClearCommand,
             SessionCommand,
             RouteCommand,
+            UnrouteCommand,
             BindingsCommand,
         )
 
         registry = cls()
         registry.register(HelpCommand())
+        registry.register(ListCronCommand())
         registry.register(AgentCommand())
         registry.register(SkillsCommand())
         registry.register(CompactCommand())
@@ -80,5 +85,6 @@ class CommandRegistry:
         registry.register(ClearCommand())
         registry.register(SessionCommand())
         registry.register(RouteCommand())
+        registry.register(UnrouteCommand())
         registry.register(BindingsCommand())
         return registry

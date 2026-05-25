@@ -45,6 +45,7 @@ class Channel(ABC, Generic[T]):
         # Inline imports to avoid circular dependency
         from mybot.channel.telegram_channel import TelegramChannel
         from mybot.channel.discord_channel import DiscordChannel
+        from mybot.channel.teams_channel import TeamsChannel
 
         channels: list["Channel[Any]"] = []
         channel_config = config.channels
@@ -53,5 +54,8 @@ class Channel(ABC, Generic[T]):
 
         if channel_config.discord and channel_config.discord.enabled:
             channels.append(DiscordChannel(channel_config.discord))
+
+        if channel_config.teams and channel_config.teams.enabled:
+            channels.append(TeamsChannel(channel_config.teams))
 
         return channels

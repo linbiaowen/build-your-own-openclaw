@@ -11,14 +11,8 @@ from fastapi.websockets import WebSocketDisconnect
 from pydantic import ValidationError, BaseModel, Field
 
 from .worker import SubscriberWorker
-from mybot.core.events import (
-    Event,
-    InboundEvent,
-    OutboundEvent,
-    DispatchEvent,
-    DispatchResultEvent,
-    WebSocketEventSource,
-)
+from mybot.core.events import Event, InboundEvent, OutboundEvent, WebSocketEventSource
+
 if TYPE_CHECKING:
     from mybot.core.context import SharedContext
 
@@ -43,12 +37,7 @@ class WebSocketWorker(SubscriberWorker):
         self.clients: Set[WebSocket] = set()
 
         # Auto-subscribe to event classes
-        for event_class in [
-            InboundEvent, 
-            OutboundEvent,
-            DispatchEvent,
-            DispatchResultEvent
-        ]:
+        for event_class in [InboundEvent, OutboundEvent]:
             self.context.eventbus.subscribe(event_class, self.handle_event)
         self.logger.info("WebSocketWorker subscribed to event types")
 
@@ -112,6 +101,10 @@ class WebSocketWorker(SubscriberWorker):
     async def handle_event(self, event: Event) -> None:
         """Handle EventBus event by broadcasting to WebSocket clients."""
         if not self.clients:
+            return
+
+        # Clients only need agent replies, not their own inbound echo
+        if not isinstance(event, OutboundEvent):
             return
 
         # Serialize event to dict with type information

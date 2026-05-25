@@ -86,13 +86,39 @@ class ClearCommand(Command):
     async def execute(self, args: str, session: "AgentSession") -> str:
         source_str = str(session.source)
 
-        if source_str in self.shared_context.config.sources:
-            del self.shared_context.config.sources[source_str]
-            self.shared_context.config.set_runtime(
-                "sources", self.shared_context.config.sources
+        if source_str in session.shared_context.config.sources:
+            del session.shared_context.config.sources[source_str]
+            session.shared_context.config.set_runtime(
+                "sources", session.shared_context.config.sources
             )
 
         return "✓ Conversation cleared. Next message starts fresh."
+
+
+class ListCronCommand(Command):
+    """List all scheduled cron jobs."""
+
+    name = "list-cron"
+    aliases = ["crons", "list-crons"]
+    description = "List all scheduled cron jobs"
+
+    async def execute(self, args: str, session: "AgentSession") -> str:
+        crons = session.shared_context.cron_loader.discover_crons()
+        crons_path = session.shared_context.config.crons_path
+
+        if not crons:
+            return f"No cron jobs found in `{crons_path}`."
+
+        lines = [f"**Cron jobs** (`{crons_path}`):\n"]
+        for cron in sorted(crons, key=lambda c: c.id):
+            one_off = "yes" if cron.one_off else "no"
+            lines.append(
+                f"- **`{cron.id}`** — {cron.name}\n"
+                f"  - Schedule: `{cron.schedule}`\n"
+                f"  - Agent: `{cron.agent}` | One-off: {one_off}\n"
+                f"  - {cron.description}"
+            )
+        return "\n".join(lines)
 
 
 class SkillsCommand(Command):

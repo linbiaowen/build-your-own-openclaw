@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+logger = logging.getLogger(__name__)
+
+_CONFIG_WATCH_SUFFIXES = ("config.user.yaml", "config.runtime.yaml")
+
 
 class LLMConfig(BaseModel):
     """LLM provider configuration."""
@@ -45,6 +49,21 @@ class DiscordConfig(BaseModel):
     allowed_user_ids: list[str] = Field(default_factory=list)
 
 
+class TeamsConfig(BaseModel):
+    """Microsoft Teams platform configuration (Bot Framework)."""
+
+    enabled: bool = True
+    app_id: str
+    app_password: str
+    app_type: Literal["MultiTenant", "SingleTenant", "UserAssignedMSI"] = (
+        "MultiTenant"
+    )
+    app_tenant_id: str | None = None
+    host: str = "0.0.0.0"
+    port: int = Field(default=3978, ge=1, le=65535)
+    allowed_user_ids: list[str] = Field(default_factory=list)
+
+
 class BraveWebSearchConfig(BaseModel):
     """Configuration for web search provider."""
 
@@ -70,6 +89,7 @@ class ChannelConfig(BaseModel):
     enabled: bool = False
     telegram: TelegramConfig | None = None
     discord: DiscordConfig | None = None
+    teams: TeamsConfig | None = None
 
 
 class Config(BaseModel):
@@ -80,6 +100,7 @@ class Config(BaseModel):
     default_agent: str
     agents_path: Path = Field(default=Path("agents"))
     skills_path: Path = Field(default=Path("skills"))
+    crons_path: Path = Field(default=Path("crons"))
     logging_path: Path = Field(default=Path(".logs"))
     history_path: Path = Field(default=Path(".history"))
     event_path: Path = Field(default=Path(".event"))
@@ -95,6 +116,7 @@ class Config(BaseModel):
         for field_name in (
             "agents_path",
             "skills_path",
+            "crons_path",
             "logging_path",
             "history_path",
             "event_path",
@@ -184,20 +206,32 @@ class Config(BaseModel):
 
     def reload(self) -> bool:
         """Re-read config.user.yaml and merge with runtime."""
+        before = (
+            f"model={self.llm.model!r}, "
+            f"temperature={self.llm.temperature}, "
+            f"default_agent={self.default_agent!r}"
+        )
         try:
             config_data = self._load_merged_configs(self.workspace)
             config_data["workspace"] = self.workspace
 
-            # Create new instance and copy values
             new_config = Config.model_validate(config_data)
 
-            # Update all fields from new config
             for field_name in Config.model_fields:
                 setattr(self, field_name, getattr(new_config, field_name))
 
+            after = (
+                f"model={self.llm.model!r}, "
+                f"temperature={self.llm.temperature}, "
+                f"default_agent={self.default_agent!r}"
+            )
+            if before == after:
+                logger.info("Config hot reload OK (no effective changes) [%s]", before)
+            else:
+                logger.info("Config hot reload OK: %s -> %s", before, after)
             return True
         except Exception as e:
-            logging.debug("Config reload failed: %s", e)
+            logger.warning("Config hot reload FAILED: %s", e)
             return False
 
 
@@ -207,10 +241,19 @@ class ConfigHandler(FileSystemEventHandler):
     def __init__(self, config: Config):
         self._config = config
 
-    def on_modified(self, event):
-        """Reload config when config.user.yaml changes."""
-        if not event.is_directory and event.src_path.endswith("config.user.yaml"):
-            self._config.reload()
+    def on_modified(self, event) -> None:
+        """Reload config when watched YAML files change."""
+        if event.is_directory:
+            return
+
+        path = Path(event.src_path)
+        if not any(path.name.endswith(suffix) for suffix in _CONFIG_WATCH_SUFFIXES):
+            logger.debug("Ignoring filesystem event: %s", path.name)
+            return
+
+        logger.info("Config file changed: %s — reloading…", path.name)
+        if not self._config.reload():
+            logger.warning("Config reload did not apply after change to %s", path.name)
 
 
 class ConfigReloader:
@@ -223,11 +266,19 @@ class ConfigReloader:
     def start(self) -> None:
         """Start watching config file for changes."""
         handler = ConfigHandler(self._config)
-        self._observer.schedule(handler, str(self._config.workspace), recursive=False)
+        workspace = self._config.workspace
+        self._observer.schedule(handler, str(workspace), recursive=False)
         self._observer.start()
+        watched = ", ".join(_CONFIG_WATCH_SUFFIXES)
+        logger.info(
+            "Config hot reload watcher started (workspace=%s, watching %s)",
+            workspace,
+            watched,
+        )
 
     def stop(self) -> None:
         """Stop watching."""
         self._observer.stop()
         self._observer.join()
         del self._observer
+        logger.info("Config hot reload watcher stopped")

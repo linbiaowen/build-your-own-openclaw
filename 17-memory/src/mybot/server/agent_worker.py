@@ -105,8 +105,21 @@ class AgentWorker(SubscriberWorker):
                         return
 
                 response = await session.chat(event.content)
+                if not (response or "").strip():
+                    from mybot.core.memory_paths import (
+                        identity_recall_reply,
+                        wants_name_recall,
+                    )
+
+                    if wants_name_recall(event.content):
+                        response = identity_recall_reply(session.state) or (
+                            "Sorry, I couldn't generate a reply."
+                        )
                 logger.info(f"Session completed: {session_id}")
 
+                if isinstance(event, DispatchEvent) and session.source.is_cron:
+                    if session.state.cron_outbound_sent:
+                        return
                 await self._emit_response(
                     event,
                     agent_id=agent_def.id,
@@ -114,7 +127,10 @@ class AgentWorker(SubscriberWorker):
                 )
 
             except Exception as e:
-                logger.error(f"Session failed: {e}")
+                logger.error(
+                    f"Session failed ({session_id}, agent={agent_def.id}): {e}",
+                    exc_info=True,
+                )
 
                 if event.retry_count < MAX_RETRIES:
                     # Use dataclasses.replace() for retry logic

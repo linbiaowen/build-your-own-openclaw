@@ -33,6 +33,7 @@ class Config(BaseModel):
     default_agent: str
     agents_path: Path = Field(default=Path("agents"))
     skills_path: Path = Field(default=Path("skills"))
+    crons_path: Path = Field(default=Path("crons"))
     history_path: Path = Field(default=Path(".history"))
 
     @model_validator(mode="after")
@@ -41,6 +42,7 @@ class Config(BaseModel):
         for field_name in (
             "agents_path",
             "skills_path",
+            "crons_path",
             "history_path",
         ):
             path = getattr(self, field_name)

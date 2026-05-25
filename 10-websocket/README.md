@@ -77,16 +77,15 @@ cd 10-websocket
 uv run my-bot server
 
 # INFO:     Application startup complete.
-# INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+# INFO:     Uvicorn running on http://127.0.0.1:8031 (Press CTRL+C to quit)
 ```
 
 In another shell
 
 ``` bash
-wscat -c ws://localhost:8000/ws
+wscat -c ws://localhost:8031/ws
 > {"source": "test", "content": "Hello, Pickle!"}
-< {"type":"InboundEvent","session_id":"c8419b2b-fc20-49a6-8fd7-79a00eeb71c5","source":"platform-ws:test","content":"Hello, Pickle!","timestamp":1773369408.214437,"retry_count":0}
-< {"type":"OutboundEvent","session_id":"c8419b2b-fc20-49a6-8fd7-79a00eeb71c5","source":"agent:pickle","content":"*waves paws excitedly* Hello there! 🐱\n\nI'm Pickle, your friendly cat assistant!","timestamp":1773369422.7538216,"error":null}
+< {"type":"OutboundEvent","session_id":"...","source":"agent:pickle","content":"Hi! I'm Pickle, your cat assistant. What would you like help with?","error":null}
 >
 ```
 

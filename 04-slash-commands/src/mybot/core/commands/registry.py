@@ -61,6 +61,7 @@ class CommandRegistry:
         """Create registry with built-in commands registered."""
         from mybot.core.commands.handlers import (
             HelpCommand,
+            ListCronCommand,
             SkillsCommand,
             SessionCommand,
         )
@@ -69,4 +70,5 @@ class CommandRegistry:
         registry.register(HelpCommand())
         registry.register(SkillsCommand())
         registry.register(SessionCommand())
+        registry.register(ListCronCommand())
         return registry

@@ -45,8 +45,9 @@ class ChannelWorker(Worker):
                 channel = self.channel_map[platform]
 
                 if not channel.is_allowed(source):
-                    self.logger.debug(
-                        f"Ignored non-whitelisted message from {platform}"
+                    self.logger.warning(
+                        f"Ignored non-whitelisted message from {platform} "
+                        f"(user_id={getattr(source, 'user_id', source)})"
                     )
                     return
 

@@ -34,13 +34,17 @@ class CronDef(BaseModel):
     @field_validator("schedule")
     @classmethod
     def validate_schedule(cls, v: str) -> str:
-        """Validate cron expression and enforce 5-minute minimum granularity."""
+        """Validate cron expression; enforce 5-minute minimum for recurring patterns only."""
         if not croniter.is_valid(v):
             raise ValueError(f"Invalid cron expression: {v}")
 
-        # Check minimum 5-minute granularity using croniter
-        # Get the first two run times and check the gap
-        base = datetime(2024, 1, 1, 0, 0)  # Arbitrary base time
+        from mybot.core.cron_schedule import is_fixed_time_schedule
+
+        # One-shot at M H D month * (e.g. reminders in N minutes)
+        if is_fixed_time_schedule(v):
+            return v
+
+        base = datetime(2024, 1, 1, 0, 0)
         cron = croniter(v, base)
         first_run = cron.get_next(datetime)
         second_run = cron.get_next(datetime)

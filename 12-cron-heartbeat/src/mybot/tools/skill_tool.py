@@ -43,8 +43,12 @@ def create_skill_tool(skill_loader: "SkillLoader"):
     async def skill_tool(skill_name: str, session: "AgentSession") -> str:
         """Load and return skill content."""
         try:
+            from mybot.core.cron_schedule import substitute_skill_templates
+
             skill_def = skill_loader.load_skill(skill_name)
-            return skill_def.content
+            return substitute_skill_templates(
+                skill_def.content, session.shared_context.config
+            )
         except Exception:
             return f"Error: Skill '{skill_name}' not found. It may have been removed or is unavailable."
 
